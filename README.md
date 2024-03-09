@@ -36,7 +36,7 @@ The objective of the game is to either eliminate the opponent's pieces or have t
 
 ---
 
-hexBordConfig allows for custom board creations.
+hexBoardConfig allows for custom board creations.
 
 ![hexxBoardConfig0](screenshots/hexxBoardConfig0.png)
 
@@ -56,7 +56,7 @@ Red wins here since there's no contest.
 
 ![hexxBoardConfig4](screenshots/hexxBoardConfig4.png)
 
-At any time and in either mode the players can "load", "save" or "quit" the game. Shortcuts to these commands are also available with the initials (for example 'l', 's' and 'q').
+At any time and in either mode the players can "load", "save" or "quit". Shortcuts to these commands are also available with the initials (example: 'l', 's' or 'q').
 
 Possible todos:
 * Random board configurations
