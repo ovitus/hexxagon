@@ -65,4 +65,4 @@ Possible todos:
 
 ---
 
-Special thanks to [Mazen-Khaddaj](https://github.com/Dr-Mazen-Khaddaj) who collaborated with me, helping improve the design of my original rough draft and providing the Instances and UtilityFxs modules. He will be bringing this to the next level as part of a project for the Cardano blockchain, with the idea being to play the game over the blockchain to allow competitive wagers.
+Special thanks to [Mazen Khaddaj](https://github.com/Dr-Mazen-Khaddaj) who collaborated with me, helping improve the design of my original rough draft and providing the Instances and UtilityFxs modules. He will be bringing this to the next level as part of a project for the Cardano blockchain, with the idea being to play the game over the blockchain to allow competitive wagers.
