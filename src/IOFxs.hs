@@ -4,16 +4,7 @@ import Control.Exception
   ( IOException
   , try
   )
-import Control.Monad.IO.Class 
-  ( liftIO
-  )
 import Control.Monad.State
-import Data.Char 
-  ( toLower
-  )
-import Data.Maybe 
-  ( fromJust
-  )
 import DataTypes 
   ( Board(..)
   , Game(..)
@@ -32,6 +23,7 @@ import MainFxs
   , checkWinner
   , destructureGame
   , makeMove
+  , match
   , modifyBoard
   , parseConfig
   , parseInput
@@ -44,7 +36,6 @@ import System.Console.ANSI
   , ConsoleLayer(..)
   , SGR(..)
   , clearScreen
-  , getTerminalSize
   , setCursorPosition
   , setSGRCode
   )
@@ -53,28 +44,88 @@ import Text.Read
   ( readMaybe
   )
 import UtilityFxs 
-  ( classicBoard_S9DC3
-  , getNearbyPositions
-  , makeClassicBoard
-  , makeEmptyClassicBoard
+  ( getNearbyPositions
   )
 import qualified Data.Map.Strict as Map
 import qualified System.Console.ANSI as C (Color(..))
 
-mai :: Game -> IO (Maybe Game)
-mai g = runInputT defaultSettings $ checkWinnerIO g
+cBlue :: Char -> [Char]
+cBlue c = setSGRCode [SetColor Background Vivid C.Blue] <> [c] <> setSGRCode [Reset]
 
-testGI :: Game
-testGI = Game Red classicBoard_S9DC3
+cRed :: Char -> [Char]
+cRed  c = setSGRCode [SetColor Background Dull C.Red]  <> [c] <> setSGRCode [Reset]
 
-screen :: Game -> InputT IO ()
-screen (Game h b) = do
+checkWinnerIO :: Game -> InputT IO (Maybe Game)
+checkWinnerIO g@(Game h b) = case checkWinner b of
+  Just (Red, b')   -> do screenWinner $ Game Red b'
+                         s <- getInputLine "   "
+                         case s of
+                           Just [] -> checkWinnerIO $ Game Red b'
+                           Just s' | any (== True) $ match s' <$> ["load", "save", "quit"] -> loadSaveQuit s' g
+                           _ -> checkWinnerIO $ Game Red b'
+  Just (Blue, b')  -> do screenWinner $ Game Blue b'; _ <- return . Just $ Game h b'
+                         s <- getInputLine "   "
+                         case s of
+                           Just [] -> checkWinnerIO $ Game Blue b'
+                           Just s' | any (== True) $ match s' <$> ["load", "save", "quit"] -> loadSaveQuit s' g
+                           _ -> checkWinnerIO $ Game Blue b'
+  Just (Empty, b') -> do screenWinner $ Game Empty b'; _ <- return . Just $ Game h b'
+                         s <- getInputLine "   "
+                         case s of
+                           Just [] -> checkWinnerIO $ Game Blue b'
+                           Just s' | any (== True) $ match s' <$> ["load", "save", "quit"] -> loadSaveQuit s' g
+                           _ -> checkWinnerIO $ Game Blue b'
+  _ -> do screen g
+          s <- getInputLine "   "
+          case s of
+            Just [] -> game g
+            Just s' | any (== True) $ match s' <$> ["load", "save", "quit"] -> loadSaveQuit s' g
+            _ -> game g
+  where
+    loadSaveQuit s g_
+      | match s "load" = do g' <- loadGame s
+                            case g' of
+                              Just g'' -> do
+                                let g''' = read g'' :: (Char, [((Integer, Integer), Char)])
+                                checkWinnerIO $ restructureGame g'''
+                              _ -> checkWinnerIO g_
+      | match s "save" = do saveGame g s; checkWinnerIO g_
+      | otherwise = return $ Just g_
+
+colorize :: Char -> [Char]
+colorize c
+  | 'R' == c = setSGRCode [SetColor Foreground Dull C.Black, SetColor Background Dull C.Red] <> [c] <> setSGRCode [Reset]
+  | 'B' == c = setSGRCode [SetColor Foreground Dull C.Black, SetColor Background Vivid C.Blue] <> [c] <> setSGRCode [Reset]
+  | 'E' == c = setSGRCode [SetColor Foreground Dull C.Black, SetColor Background Vivid C.Black] <> [c] <> setSGRCode [Reset]
+  | otherwise = [c]
+
+configBoard :: Board -> IO ()
+configBoard b = runInputT defaultSettings $ configBoard' b
+
+configBoard' :: Board -> InputT IO ()
+configBoard' b = do 
   liftIO clearScreen
   liftIO $ setCursorPosition 0 0
-  hexxagonTitle h
+  outputStrLn $ "\n  " <> setSGRCode [SetColor Background Vivid C.Black, SetConsoleIntensity BoldIntensity] <> " HEXXAGŌN BOARD CONFIGURATION " <> setSGRCode [Reset]
   scoreIO b
-  outputStrLn . concatMap colorize $ showBoard Edge OnlyHexagons [] b
-  return ()
+  outputStrLn . concatMap colorize $ showBoard Edge CoordsAndHexs [] b
+  input <- getInputLine "   "
+  case input of
+    Just [] -> configBoard' b
+    Just s
+      | match s "blue"   -> configBoard' . modifyBoard b $ (\(x,y) -> Right ((Position x y), Blue)) <$> (parseConfig . tail $ words s)
+      | match s "delete" -> configBoard' . modifyBoard b $ (\(x,y) -> Left (Position x y)) <$> (parseConfig . tail $ words s)
+      | match s "empty"  -> configBoard' . modifyBoard b $ (\(x,y) -> Right ((Position x y), Empty)) <$> (parseConfig . tail $ words s)
+      | match s "load"   -> do g' <- loadGame s
+                               case g' of
+                                 Just g'' -> do
+                                   let g''' = read g'' :: (Char, [((Integer, Integer), Char)])
+                                   configBoard' . board $ restructureGame g'''
+                                 _ -> configBoard' b
+      | match s "quit"   -> return ()
+      | match s "red"    -> configBoard' . modifyBoard b $ (\(x,y) -> Right ((Position x y), Red)) <$> (parseConfig . tail $ words s)
+      | match s "save"   -> do saveGame (Game Red b) s; configBoard' b
+    _ -> configBoard' b
 
 game :: Game -> InputT IO (Maybe Game)
 game g = do
@@ -87,50 +138,16 @@ game g = do
           Right fp' -> case fp' of
             Just (fp'', d) -> do
               case makeMove g (Move ip'' fp'') d of
-                Just g'@(Game h _) -> checkWinnerIO g'
+                Just g'@(Game _ _) -> checkWinnerIO g'
                 _ -> return Nothing
             _ -> checkWinnerIO g
-          Left g -> case g of
-            Just g' -> checkWinnerIO g'
-            _ -> return g 
+          Left g' -> case g' of
+            Just g'' -> checkWinnerIO g''
+            _ -> return g' 
       _ -> checkWinnerIO g
-    Left g -> case g of
-      Just g' -> checkWinnerIO g'
-      _ -> return g
-
-saveGame :: Game -> String -> InputT IO ()
-saveGame g s = do
-  liftIO . writeFile (last $ words s) . show $ destructureGame g
-  return ()
-
-loadGame :: String -> InputT IO (Maybe String)
-loadGame s = do
-  g <- liftIO . try . readFile . last $ words s :: InputT IO (Either IOException String)
-  case g of
-    Right g' -> return $ Just g'
-    _        -> return Nothing
-
-getInitialPosition :: Game -> InputT IO (Either (Maybe Game) (Maybe Position))
-getInitialPosition g@(Game h b@(Board mph)) = do
-  liftIO clearScreen
-  liftIO $ setCursorPosition 0 0
-  hexxagonTitle h
-  scoreIO b
-  outputStrLn . concatMap colorize $ showBoard Edge SelectiveCoords (filter (\p -> length (concat $ getNearbyPositions b p Empty <$> [1,2]) > 0) $ Map.keys $ Map.filter (== h) mph) b
-  ip <- getInputLine "   "
-  case ip of
-    Just [] -> return $ Right Nothing
-    Just s 
-      | (toLower <$> (head $ words s)) == "s" || (toLower <$> (head $ words s)) == "save" -> do saveGame g s
-                                                                                                getInitialPosition g
-      | (toLower <$> (head $ words s)) == "q" || (toLower <$> (head $ words s)) == "quit" -> return . Left $ Nothing
-      | (toLower <$> (head $ words s)) == "l" || (toLower <$> (head $ words s)) == "load" -> do g' <- loadGame s
-                                                                                                case g' of
-                                                                                                  Just g'' -> do
-                                                                                                    let g''' = read g'' :: (Char, [((Integer, Integer), Char)])
-                                                                                                    return . Left . Just $ restructureGame g'''
-                                                                                                  _ -> getInitialPosition g
-    _ -> return . Right $ ip >>= parseInput >>= checkInitialPosition g
+    Left g' -> case g' of
+      Just g'' -> checkWinnerIO g''
+      _ -> return g'
 
 getFinalPosition :: Game -> Position -> InputT IO (Either (Maybe Game) (Maybe (Position, Integer)))
 getFinalPosition g@(Game h b) ip = do
@@ -142,30 +159,71 @@ getFinalPosition g@(Game h b) ip = do
   fp <- getInputLine "   "
   case fp of
     Just [] -> return $ Right Nothing
-    Just s 
-      | (toLower <$> (head $ words s)) == "s" || (toLower <$> (head $ words s)) == "save" -> do saveGame g s
-                                                                                                getFinalPosition g ip
-      | (toLower <$> (head $ words s)) == "q" || (toLower <$> (head $ words s)) == "quit" -> return . Left $ Nothing
-      | (toLower <$> (head $ words s)) == "l" || (toLower <$> (head $ words s)) == "load" -> do g' <- loadGame s
-                                                                                                case g' of
-                                                                                                  Just g'' -> do
-                                                                                                    let g''' = read g'' :: (Char, [((Integer, Integer), Char)])
-                                                                                                    return . Left . Just $ restructureGame g'''
-                                                                                                  _ -> getFinalPosition g ip
+    Just s | any (== True) $ match s <$> ["load", "save", "quit"] -> posLoadSaveQuit s (flip getFinalPosition ip) g
     _ -> return . Right $ fp >>= parseInput >>= checkFinalPosition b . Move ip
+
+getInitialPosition :: Game -> InputT IO (Either (Maybe Game) (Maybe Position))
+getInitialPosition g@(Game h b@(Board mph)) = do
+  liftIO clearScreen
+  liftIO $ setCursorPosition 0 0
+  hexxagonTitle h
+  scoreIO b
+  outputStrLn . concatMap colorize $ showBoard Edge SelectiveCoords (filter (\p -> length (concat $ getNearbyPositions b p Empty <$> [1,2]) > 0) $ Map.keys $ Map.filter (== h) mph) b
+  ip <- getInputLine "   "
+  case ip of
+    Just [] -> return $ Right Nothing
+    Just s | any (== True) $ match s <$> ["load", "save", "quit"] -> posLoadSaveQuit s getInitialPosition g
+    _ -> return . Right $ ip >>= parseInput >>= checkInitialPosition g
 
 hexxagonTitle :: Hexagon -> InputT IO ()
 hexxagonTitle h = 
   if h == Red 
-  then outputStrLn $ "\n  " <> setSGRCode [SetColor Background Dull C.Red, SetConsoleIntensity BoldIntensity] <> " HEXXAGŌN " <> setSGRCode [Reset]
+  then outputStrLn $ "\n  " <> setSGRCode [SetColor Background Dull C.Red  , SetConsoleIntensity BoldIntensity] <> " HEXXAGŌN " <> setSGRCode [Reset]
   else outputStrLn $ "\n  " <> setSGRCode [SetColor Background Vivid C.Blue, SetConsoleIntensity BoldIntensity] <> " HEXXAGŌN " <> setSGRCode [Reset]
 
 hexxagonWinner :: Hexagon -> InputT IO ()
 hexxagonWinner h = case h of
-  Red  -> outputStrLn $ "\n  " <> setSGRCode [SetColor Background Dull  C.Red   , SetConsoleIntensity BoldIntensity] <> " HEXXAGŌN WINNER! " <> setSGRCode [Reset]
-  Blue -> outputStrLn $ "\n  " <> setSGRCode [SetColor Background Vivid C.Blue  , SetConsoleIntensity BoldIntensity] <> " HEXXAGŌN WINNER! " <> setSGRCode [Reset]
-  _    -> outputStrLn $ "\n  " <> (concat $ (\(x,y) -> x <> [y]) <$> zip (cycle $ [setSGRCode [SetColor Background Dull C.Red, SetConsoleIntensity BoldIntensity], setSGRCode [SetColor Background Vivid C.Blue, SetConsoleIntensity BoldIntensity]]) " HEXXAGŌN TIE! ") <> setSGRCode [Reset]
+  Red  -> outputStrLn $ "\n  " <> setSGRCode [SetColor Background Dull  C.Red ,  SetConsoleIntensity BoldIntensity] <> " HEXXAGŌN WINNER! " <> setSGRCode [Reset]
+  Blue -> outputStrLn $ "\n  " <> setSGRCode [SetColor Background Vivid C.Blue,  SetConsoleIntensity BoldIntensity] <> " HEXXAGŌN WINNER! " <> setSGRCode [Reset]
+  _    -> outputStrLn $ "\n  " <> setSGRCode [SetColor Background Vivid C.Black, SetConsoleIntensity BoldIntensity] <> " HEXXAGŌN TIE! " <> setSGRCode [Reset]
 
+loadGame :: String -> InputT IO (Maybe String)
+loadGame s = do
+  g <- liftIO . try . readFile . last $ words s :: InputT IO (Either IOException String)
+  case g of
+    Right g' -> return $ Just g'
+    _        -> return Nothing
+
+parseList :: String -> Maybe [(Integer, Integer)]
+parseList x = readMaybe x
+
+posLoadSaveQuit :: String -> (Game -> InputT IO (Either (Maybe Game) b)) -> Game -> InputT IO (Either (Maybe Game) b)
+posLoadSaveQuit s f g
+  | match s "load" = do g' <- loadGame s
+                        case g' of
+                          Just g'' -> do
+                            let g''' = read g'' :: (Char, [((Integer, Integer), Char)])
+                            return . Left . Just $ restructureGame g'''
+                          _ -> f g
+  | match s "save" = do saveGame g s; f g
+  | otherwise = return . Left $ Nothing
+
+saveGame :: Game -> String -> InputT IO ()
+saveGame g s = do
+  liftIO . writeFile (last $ words s) . show $ destructureGame g
+  return ()
+
+scoreIO :: Board -> InputT IO ()
+scoreIO b = outputStrLn . (\(r,bl) -> "\n   " <> (if r == 0 then "\n" else show r <> "\n   ") <> concatMap cRed (replicate r ' ') <> "\n   " <> (if bl == 0 then "" else show bl) <> "\n   " <> concatMap cBlue (replicate bl ' ')) $ score b
+
+screen :: Game -> InputT IO ()
+screen (Game h b) = do
+  liftIO clearScreen
+  liftIO $ setCursorPosition 0 0
+  hexxagonTitle h
+  scoreIO b
+  outputStrLn . concatMap colorize $ showBoard Edge OnlyHexagons [] b
+  return ()
 
 screenWinner :: Game -> InputT IO ()
 screenWinner (Game h b) = do
@@ -175,113 +233,3 @@ screenWinner (Game h b) = do
   scoreIO b
   outputStrLn . concatMap colorize $ showBoard Edge OnlyHexagons [] b
   return ()
-
-colorize :: Char -> [Char]
-colorize c
-  | 'R' == c = setSGRCode [SetColor Foreground Dull C.Black, SetColor Background Dull C.Red] <> [c] <> setSGRCode [Reset]
-  | 'B' == c = setSGRCode [SetColor Foreground Dull C.Black, SetColor Background Vivid C.Blue] <> [c] <> setSGRCode [Reset]
-  | 'E' == c = setSGRCode [SetColor Foreground Dull C.Black, SetColor Background Vivid C.Black] <> [c] <> setSGRCode [Reset]
-  | otherwise = [c]
-
-cRed :: Char -> [Char]
-cRed  c = setSGRCode [SetColor Background Dull C.Red]  <> [c] <> setSGRCode [Reset]
-
-cBlue :: Char -> [Char]
-cBlue c = setSGRCode [SetColor Background Vivid C.Blue] <> [c] <> setSGRCode [Reset]
-
-checkWinnerIO :: Game -> InputT IO (Maybe Game)
-checkWinnerIO g@(Game h b) = case checkWinner b of
-  Just (Red, b') -> do screenWinner $ Game Red b'
-                       s <- getInputLine "   "
-                       case s of
-                         Just [] -> checkWinnerIO $ Game Red b'
-                         Just s 
-                           | (toLower <$> (head $ words s)) == "s" || (toLower <$> (head $ words s)) == "save" -> do saveGame g s; checkWinnerIO g
-                           | (toLower <$> (head $ words s)) == "l" || (toLower <$> (head $ words s)) == "load" -> do g' <- loadGame s
-                                                                                                                     case g' of
-                                                                                                                       Just g'' -> do
-                                                                                                                         let g''' = read g'' :: (Char, [((Integer, Integer), Char)])
-                                                                                                                         checkWinnerIO $ restructureGame g'''
-                                                                                                                       _ -> checkWinnerIO g
-                           | (toLower <$> (head $ words s)) == "q" || (toLower <$> (head $ words s)) == "quit" -> return $ Just g
-                         _ -> checkWinnerIO $ Game Red b'
-  Just (Blue, b') -> do screenWinner $ Game Blue b'; return . Just $ Game h b'
-                        s <- getInputLine "   "
-                        case s of
-                          Just [] -> checkWinnerIO $ Game Blue b'
-                          Just s 
-                            | (toLower <$> (head $ words s)) == "s" || (toLower <$> (head $ words s)) == "save" -> do saveGame g s; checkWinnerIO g
-                            | (toLower <$> (head $ words s)) == "l" || (toLower <$> (head $ words s)) == "load" -> do g' <- loadGame s
-                                                                                                                      case g' of
-                                                                                                                        Just g'' -> do
-                                                                                                                          let g''' = read g'' :: (Char, [((Integer, Integer), Char)])
-                                                                                                                          checkWinnerIO $ restructureGame g'''
-                                                                                                                        _ -> checkWinnerIO g
-                            | (toLower <$> (head $ words s)) == "q" || (toLower <$> (head $ words s)) == "quit" -> return $ Just g
-                          _ -> checkWinnerIO $ Game Blue b'
-  Just (Empty, b') -> do screenWinner $ Game Empty b'; return . Just $ Game h b'
-                         s <- getInputLine "   "
-                         case s of
-                           Just [] -> checkWinnerIO $ Game Blue b'
-                           Just s 
-                             | (toLower <$> (head $ words s)) == "s" || (toLower <$> (head $ words s)) == "save" -> do saveGame g s; checkWinnerIO g
-                             | (toLower <$> (head $ words s)) == "l" || (toLower <$> (head $ words s)) == "load" -> do g' <- loadGame s
-                                                                                                                       case g' of
-                                                                                                                         Just g'' -> do
-                                                                                                                           let g''' = read g'' :: (Char, [((Integer, Integer), Char)])
-                                                                                                                           checkWinnerIO $ restructureGame g'''
-                                                                                                                         _ -> checkWinnerIO g
-                             | (toLower <$> (head $ words s)) == "q" || (toLower <$> (head $ words s)) == "quit" -> return $ Just g
-                           _ -> checkWinnerIO $ Game Blue b'
-  _ -> do screen g
-          s <- getInputLine "   "
-          case s of
-            Just [] -> game g
-            Just s 
-              | (toLower <$> (head $ words s)) == "s" || (toLower <$> (head $ words s)) == "save" -> do saveGame g s; checkWinnerIO g
-              | (toLower <$> (head $ words s)) == "l" || (toLower <$> (head $ words s)) == "load" -> do g' <- loadGame s
-                                                                                                        case g' of
-                                                                                                          Just g'' -> do
-                                                                                                            let g''' = read g'' :: (Char, [((Integer, Integer), Char)])
-                                                                                                            checkWinnerIO $ restructureGame g'''
-                                                                                                          _ -> checkWinnerIO g
-              | (toLower <$> (head $ words s)) == "q" || (toLower <$> (head $ words s)) == "quit" -> return $ Just g
-            _ -> game g
-
-
-scoreIO :: Board -> InputT IO ()
-scoreIO b = outputStrLn . (\(r,bl) -> "\n   " <> (if r == 0 then "\n" else show r <> "\n   ") <> concatMap cRed (replicate r ' ') <> "\n   " <> (if bl == 0 then "" else show bl) <> "\n   " <> concatMap cBlue (replicate bl ' ')) $ score b
-
-
-parseList :: String -> Maybe [(Integer, Integer)]
-parseList x = readMaybe x
-
-configBoard_ = configBoard $ makeEmptyClassicBoard 9
-
-configBoard :: Board -> IO ()
-configBoard b = runInputT defaultSettings $ configBoard' b
-
-configBoard' :: Board -> InputT IO ()
-configBoard' b = do 
-  liftIO clearScreen
-  liftIO $ setCursorPosition 0 0
-  outputStrLn $ "\n  " <> setSGRCode [SetColor Background Vivid C.Black, SetConsoleIntensity BoldIntensity] <> " HEXXAGŌN " <> setSGRCode [Reset]
-  outputStrLn $ "\n   CONFIGURE BOARD\n\n\n" <> setSGRCode [Reset]
-  outputStrLn . concatMap colorize $ showBoard Edge CoordsAndHexs [] b
-  input <- getInputLine "   "
-  case input of
-    Just [] -> configBoard' b
-    Just s
-      | (toLower <$> (head $ words s)) == "b" || (toLower <$> (head $ words s)) == "blue"   -> configBoard' . modifyBoard b $ (\(x,y) -> Right ((Position x y), Blue)) <$> (parseConfig . tail $ words s)
-      | (toLower <$> (head $ words s)) == "d" || (toLower <$> (head $ words s)) == "delete" -> configBoard' . modifyBoard b $ (\(x,y) -> Left (Position x y)) <$> (parseConfig . tail $ words s)
-      | (toLower <$> (head $ words s)) == "e" || (toLower <$> (head $ words s)) == "empty"  -> configBoard' . modifyBoard b $ (\(x,y) -> Right ((Position x y), Empty)) <$> (parseConfig . tail $ words s)
-      | (toLower <$> (head $ words s)) == "r" || (toLower <$> (head $ words s)) == "red"    -> configBoard' . modifyBoard b $ (\(x,y) -> Right ((Position x y), Red)) <$> (parseConfig . tail $ words s)
-      | (toLower <$> (head $ words s)) == "s" || (toLower <$> (head $ words s)) == "save"   -> do saveGame (Game Red b) s; configBoard' b
-      | (toLower <$> (head $ words s)) == "l" || (toLower <$> (head $ words s)) == "load"   -> do g' <- loadGame s
-                                                                                                  case g' of
-                                                                                                    Just g'' -> do
-                                                                                                      let g''' = read g'' :: (Char, [((Integer, Integer), Char)])
-                                                                                                      configBoard' . board $ restructureGame g'''
-                                                                                                    _ -> configBoard' b
-      | (toLower <$> (head $ words s)) == "q" || (toLower <$> (head $ words s)) == "quit"   -> return ()
-    _ -> configBoard' b

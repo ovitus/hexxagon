@@ -15,13 +15,13 @@ import  DataTypes
 import qualified Data.Map.Strict as Map
 
 instance Show Hexagon where
-  show Red    = "R"
-  show Blue   = "B"
-  show Empty  = "E"
+  show Red   = "R"
+  show Blue  = "B"
+  show Empty = "E"
 
 instance Enum Hexagon where
-  succ Red   = Blue
-  succ Blue  = Red
+  succ Red  = Blue
+  succ Blue = Red
 
 instance Show Board where
   show = showBoard Edge CoordsAndHexs []
@@ -70,7 +70,7 @@ showOrganizedBoard orientation mode pos'= case orientation of
     Edge    -> concatLines . pruneBoard . (showLine <$>) . zip [1..]
     Vertex  -> concatLines              . (showLine <$>) . zip [1..]
     where
-        pruneBoard board = (pruneLine (length board * 2) <$>) <$> board
+        pruneBoard b = (pruneLine (length b * 2) <$>) <$> b
         pruneLine l (c:cs) = c: drop l cs
         pruneLine _ [] = []
 
