@@ -40,6 +40,10 @@ import System.Console.ANSI
   , setSGRCode
   )
 import System.Console.Haskeline
+import System.IO 
+  ( hFlush
+  , stdout
+  )
 import Text.Read 
   ( readMaybe
   )
@@ -104,8 +108,7 @@ configBoard b = runInputT defaultSettings $ configBoard' b
 
 configBoard' :: Board -> InputT IO ()
 configBoard' b = do 
-  liftIO clearScreen
-  liftIO $ setCursorPosition 0 0
+  liftIO resetCursor
   outputStrLn $ "\n  " <> setSGRCode [SetColor Background Vivid C.Black, SetConsoleIntensity BoldIntensity] <> " HEXXAGŌN BOARD CONFIGURATION " <> setSGRCode [Reset]
   scoreIO b
   outputStrLn . concatMap colorize $ showBoard Edge CoordsAndHexs [] b
@@ -151,8 +154,7 @@ game g = do
 
 getFinalPosition :: Game -> Position -> InputT IO (Either (Maybe Game) (Maybe (Position, Integer)))
 getFinalPosition g@(Game h b) ip = do
-  liftIO clearScreen
-  liftIO $ setCursorPosition 0 0
+  liftIO resetCursor
   hexxagonTitle h
   scoreIO b
   outputStrLn . concatMap colorize $ showBoard Edge SelectiveCoords (concatMap (getNearbyPositions b ip Empty) [1,2]) b
@@ -164,8 +166,7 @@ getFinalPosition g@(Game h b) ip = do
 
 getInitialPosition :: Game -> InputT IO (Either (Maybe Game) (Maybe Position))
 getInitialPosition g@(Game h b@(Board mph)) = do
-  liftIO clearScreen
-  liftIO $ setCursorPosition 0 0
+  liftIO resetCursor
   hexxagonTitle h
   scoreIO b
   outputStrLn . concatMap colorize $ showBoard Edge SelectiveCoords (filter (\p -> length (concat $ getNearbyPositions b p Empty <$> [1,2]) > 0) $ Map.keys $ Map.filter (== h) mph) b
@@ -208,6 +209,12 @@ posLoadSaveQuit s f g
   | match s "save" = do saveGame g s; f g
   | otherwise = return . Left $ Nothing
 
+resetCursor :: IO ()
+resetCursor = do
+  clearScreen
+  setCursorPosition 0 0
+  hFlush stdout
+
 saveGame :: Game -> String -> InputT IO ()
 saveGame g s = do
   liftIO . writeFile (last $ words s) . show $ destructureGame g
@@ -218,8 +225,7 @@ scoreIO b = outputStrLn . (\(r,bl) -> "\n   " <> (if r == 0 then "\n" else show 
 
 screen :: Game -> InputT IO ()
 screen (Game h b) = do
-  liftIO clearScreen
-  liftIO $ setCursorPosition 0 0
+  liftIO resetCursor
   hexxagonTitle h
   scoreIO b
   outputStrLn . concatMap colorize $ showBoard Edge OnlyHexagons [] b
@@ -227,8 +233,7 @@ screen (Game h b) = do
 
 screenWinner :: Game -> InputT IO ()
 screenWinner (Game h b) = do
-  liftIO clearScreen
-  liftIO $ setCursorPosition 0 0
+  liftIO resetCursor
   hexxagonWinner h
   scoreIO b
   outputStrLn . concatMap colorize $ showBoard Edge OnlyHexagons [] b
