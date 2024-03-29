@@ -103,7 +103,7 @@ modifyBoard b mods = Board $ foldr modifyBoard' b' mods
      modifyBoard' (Right (pos,hex))   = Map.insert pos hex 
 
 noMoves :: Hexagon -> Board -> Bool
-noMoves h b@(Board mph) = null . concat $ (\x -> getNearbyPositions b x Empty <$> [1,2]) <$> (Map.keys $ Map.filter (== h) mph)
+noMoves h b@(Board mph) = null . concat . concat $ (\x -> getNearbyPositions b x Empty <$> [1,2]) <$> (Map.keys $ Map.filter (== h) mph)
 
 parseConfig :: [String] -> [(Integer,Integer)]
 parseConfig = fmap (\s -> (toInteger . digitToInt $ head s, toInteger . digitToInt $ last s)) <$> filter (\s -> all (== True) (fmap isDigit s) && length s == 2)

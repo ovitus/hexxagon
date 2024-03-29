@@ -217,8 +217,10 @@ resetCursor = do
 
 saveGame :: Game -> String -> InputT IO ()
 saveGame g s = do
-  liftIO . writeFile (last $ words s) . show $ destructureGame g
-  return ()
+  g <- liftIO . try . writeFile (last $ words s) . show $ destructureGame g :: InputT IO (Either IOException ())
+  case g of
+    Right g' -> return ()
+    _ -> return ()
 
 scoreIO :: Board -> InputT IO ()
 scoreIO b = outputStrLn . (\(r,bl) -> "\n   " <> (if r == 0 then "\n" else show r <> "\n   ") <> concatMap cRed (replicate r ' ') <> "\n   " <> (if bl == 0 then "" else show bl) <> "\n   " <> concatMap cBlue (replicate bl ' ')) $ score b
