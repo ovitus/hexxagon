@@ -12,6 +12,7 @@ module MainFxs
   , parseInput
   , restructureGame
   , score
+  , boardToMap
   ) where
 
 import Data.Char 
@@ -32,6 +33,9 @@ import UtilityFxs
   , getNearbyPositions
   )
 import qualified Data.Map.Strict as Map
+import Data.List
+  ( isPrefixOf
+  )
 
 checkFinalPosition :: Board -> Move -> Maybe (Position, Integer)
 checkFinalPosition (Board mph) m@(Move _ fp) = case Map.lookup fp mph of
@@ -93,7 +97,7 @@ makeMove (Game h b@(Board mph)) (Move ip fp) d = case d of
   _ -> Nothing
 
 match :: String -> String -> Bool
-match s s' = (toLower <$> (head $ words s)) == s' || (toLower <$> (head $ words s)) == [head s']
+match s s' = isPrefixOf (head $ words s) s'
 
 modifyBoard :: Board -> [Either Position Block] -> Board
 modifyBoard b mods = Board $ foldr modifyBoard' b' mods
@@ -134,3 +138,6 @@ restructureGame (c, iic) = Game (charToHex c) (Board . Map.fromList $ (\((x,y), 
 
 score :: Board -> (Int, Int)
 score (Board b) = (length . Map.toList $ Map.filter (== Red) b, length . Map.toList $ Map.filter (== Blue) b)
+
+boardToMap :: Board -> Map.Map Position Hexagon
+boardToMap (Board mph) = mph
