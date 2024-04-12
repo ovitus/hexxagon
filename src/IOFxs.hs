@@ -141,13 +141,13 @@ hexxagonHelp = do
 
 checkWinnerIO :: Game -> InputT IO (Maybe Game)
 checkWinnerIO g@(Game h b) = case checkWinner b of
-  Just (Red, b')   -> do screenWinner $ Game Red   b'; _ <- return . Just $ Game h b'
+  Just (Red, b')   -> do screenWinner $ Game Red   b'
                          s <- getInputLine "   "
                          hexxGameOptions s g
-  Just (Blue, b')  -> do screenWinner $ Game Blue  b'; _ <- return . Just $ Game h b'
+  Just (Blue, b')  -> do screenWinner $ Game Blue  b'
                          s <- getInputLine "   "
                          hexxGameOptions s g
-  Just (Empty, b') -> do screenWinner $ Game Empty b'; _ <- return . Just $ Game h b'
+  Just (Empty, b') -> do screenWinner $ Game Empty b'
                          s <- getInputLine "   "
                          hexxGameOptions s g
   _ -> do screen g
