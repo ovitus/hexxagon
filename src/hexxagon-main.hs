@@ -1,11 +1,11 @@
 module Main where
 
 import IOFxs 
-  ( createCustomBoard
+  ( boardConfigRunInputT
   )
 import DataTypes
   ( Game(..)
   )
 
 main :: IO (Maybe Game)
-main = createCustomBoard
+main = boardConfigRunInputT

@@ -1,5 +1,6 @@
 module MainFxs 
-  ( checkFinalPosition
+  ( boardToMap
+  , checkFinalPosition
   , checkInitialPosition
   , checkWinner
   , destructureGame
@@ -12,14 +13,15 @@ module MainFxs
   , parseInput
   , restructureGame
   , score
-  , boardToMap
   ) where
 
 import Data.Char 
   ( digitToInt
   , isDigit
-  , toLower
   ) 
+import Data.List
+  ( isPrefixOf
+  )
 import DataTypes 
   ( Block
   , Board(..)
@@ -33,9 +35,9 @@ import UtilityFxs
   , getNearbyPositions
   )
 import qualified Data.Map.Strict as Map
-import Data.List
-  ( isPrefixOf
-  )
+
+boardToMap :: Board -> Map.Map Position Hexagon
+boardToMap (Board mph) = mph
 
 checkFinalPosition :: Board -> Move -> Maybe (Position, Integer)
 checkFinalPosition (Board mph) m@(Move _ fp) = case Map.lookup fp mph of
@@ -54,6 +56,7 @@ checkInitialPosition (Game h b@(Board mph)) ip = case Map.lookup ip mph of
 
 checkWinner :: Board -> Maybe (Hexagon, Board)
 checkWinner b@(Board mph)
+  | all (== Empty)  $ Map.elems mph = Just (Empty, b)
   | not . elem Blue $ Map.elems mph = Just (Red, b)
   | not . elem Red  $ Map.elems mph = Just (Blue, b)
   | noMoves Red b = case (score $ completeBoard Blue b) of
@@ -68,8 +71,10 @@ checkWinner b@(Board mph)
 
 completeBoard :: Hexagon -> Board -> Board
 completeBoard h b = case noMoves h b of  
-  False -> completeBoard h $ fillBoard h b 
-  _     -> b
+  True -> b
+  _    -> completeBoard h $ fill h b 
+   where
+     fill h' b'@(Board mph) = Board . foldr (\x -> Map.insert x h') mph . concat $ (\x -> getNearbyPositions b' x Empty 2) <$> (Map.keys $ Map.filter (== h') mph)
 
 destructureGame :: Game -> (Char, [((Integer, Integer), Char)])
 destructureGame (Game h (Board mph)) = (hexToChar h, ((\(p,h') -> ((getX p, getY p), hexToChar h')) <$> Map.toList mph))
@@ -138,6 +143,3 @@ restructureGame (c, iic) = Game (charToHex c) (Board . Map.fromList $ (\((x,y), 
 
 score :: Board -> (Int, Int)
 score (Board b) = (length . Map.toList $ Map.filter (== Red) b, length . Map.toList $ Map.filter (== Blue) b)
-
-boardToMap :: Board -> Map.Map Position Hexagon
-boardToMap (Board mph) = mph
