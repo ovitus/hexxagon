@@ -174,21 +174,21 @@ gameCommands :: Maybe String -> Game -> InputT IO (Maybe Game)
 gameCommands s g = do
   case s of
     Just [] -> checkWinnerIO g
-    Just s'  -> lsqh s' g
+    Just s' -> gameCommands' s' g
     _       -> checkWinnerIO g
     where
-      lsqh s g
-        | match s "save" = do saveGame g s; checkWinnerIO g
-        | match s "load" = do g' <- loadGame s
-                              case g' of
-                                Just g'' -> do
-                                  let g''' = read g'' :: (Char, [((Integer, Integer), Char)])
-                                  checkWinnerIO $ restructureGame g'''
-                                _ -> checkWinnerIO g
-        | match s "reset" = boardConfig classicBoard_S9DC3 
-        | match s "quit" = return $ Just g
-        | match s "help" = gameHelp g
-        | otherwise = checkWinnerIO g
+      gameCommands' s_ g_
+        | match s_ "save" = do saveGame g_ s_; checkWinnerIO g_
+        | match s_ "load" = do g' <- loadGame s_
+                               case g' of
+                                 Just g'' -> do
+                                   let g''' = read g'' :: (Char, [((Integer, Integer), Char)])
+                                   checkWinnerIO $ restructureGame g'''
+                                 _ -> checkWinnerIO g
+        | match s_ "reset" = boardConfig classicBoard_S9DC3 
+        | match s_ "quit" = return $ Just g_
+        | match s_ "help" = gameHelp g_
+        | otherwise = checkWinnerIO g_
 
 gameHelp :: Game -> InputT IO (Maybe Game)
 gameHelp g = do
